@@ -9,22 +9,24 @@ using Newtonsoft.Json.Linq;
 
 namespace BTCPayServer.Services.Rates
 {
-    public class BitbankRateProvider : IRateProvider
+    public class BitbankRateProvider : IRateProvider, IHasExchangeName
     {
         private readonly HttpClient _httpClient;
         public BitbankRateProvider(HttpClient httpClient)
         {
             _httpClient = httpClient ?? new HttpClient();
         }
+        public string ExchangeName => "bitbank";
 
-        public async Task<PairRate[]> GetRatesAsync(CancellationToken cancellationToken)
+        public async Task<ExchangeRates> GetRatesAsync(CancellationToken cancellationToken)
         {
             var response = await _httpClient.GetAsync("https://public.bitbank.cc/prices", cancellationToken);
             var jobj = await response.Content.ReadAsAsync<JObject>(cancellationToken);
-            return ((jobj["data"] as JObject) ?? new JObject())
+            return new ExchangeRates(((jobj["data"] as JObject) ?? new JObject())
                 .Properties()
-                .Select(p => new PairRate(CurrencyPair.Parse(p.Name), CreateBidAsk(p)))
-                .ToArray();
+                .Select(p => new ExchangeRate(ExchangeName, CurrencyPair.Parse(p.Name), CreateBidAsk(p)))
+                .ToArray());
+
         }
 
         private static BidAsk CreateBidAsk(JProperty p)

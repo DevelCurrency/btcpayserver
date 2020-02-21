@@ -293,4 +293,3 @@ BTCPayServer/wwwroot/bundles/*
 !BTCPayServer/wwwroot/bundles/.gitignore
 
 .vscode
-BTCPayServer/testpwd

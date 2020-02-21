@@ -54,19 +54,20 @@ namespace BTCPayServer.Services.Rates
     }
 
     /// <summary>
-    /// This class is a decorator which handle caching and pre-emptive query to the underlying rate provider
+    /// This class is a decorator which handle caching and pre-emptive query to the underlying exchange
     /// </summary>
     public class BackgroundFetcherRateProvider : IRateProvider
     {
         public class LatestFetch
         {
-            public PairRate[] Latest;
+            public ExchangeRates Latest;
             public DateTimeOffset NextRefresh;
             public TimeSpan Backoff = TimeSpan.FromSeconds(5.0);
             public DateTimeOffset Updated;
             public DateTimeOffset Expiration;
             public Exception Exception;
-            internal PairRate[] GetResult()
+            public string ExchangeName;
+            internal ExchangeRates GetResult()
             {
                 if (Expiration <= DateTimeOffset.UtcNow)
                 {
@@ -76,7 +77,7 @@ namespace BTCPayServer.Services.Rates
                     }
                     else
                     {
-                        throw new InvalidOperationException($"The rate has expired");
+                        throw new InvalidOperationException($"The rate has expired ({ExchangeName})");
                     }
                 }
                 return Latest;
@@ -86,23 +87,28 @@ namespace BTCPayServer.Services.Rates
         IRateProvider _Inner;
         public IRateProvider Inner => _Inner;
 
-        public BackgroundFetcherRateProvider(IRateProvider inner)
+        public BackgroundFetcherRateProvider(string exchangeName, IRateProvider inner)
         {
             if (inner == null)
                 throw new ArgumentNullException(nameof(inner));
+            if (exchangeName == null)
+                throw new ArgumentNullException(nameof(exchangeName));
             _Inner = inner;
+            ExchangeName = exchangeName;
         }
 
         public BackgroundFetcherState GetState()
         {
             var state = new BackgroundFetcherState()
             {
+                ExchangeName = ExchangeName,
                 LastRequested = LastRequested
             };
             if (_Latest is LatestFetch fetch)
             {
                 state.LastUpdated = fetch.Updated;
                 state.Rates = fetch.Latest
+                            .Where(e => e.Exchange == ExchangeName)
                             .Select(r => new BackgroundFetcherRate()
                             {
                                 Pair = r.CurrencyPair,
@@ -114,13 +120,16 @@ namespace BTCPayServer.Services.Rates
 
         public void LoadState(BackgroundFetcherState state)
         {
+            if (ExchangeName != state.ExchangeName)
+                throw new InvalidOperationException("The state does not belong to this fetcher");
             if (state.LastRequested is DateTimeOffset lastRequested)
                 this.LastRequested = state.LastRequested;
             if (state.LastUpdated is DateTimeOffset updated && state.Rates is List<BackgroundFetcherRate> rates)
             {
                 var fetch = new LatestFetch()
                 {
-                    Latest = rates.Select(r => new PairRate(r.Pair, r.BidAsk)).ToArray(),
+                    ExchangeName = state.ExchangeName,
+                    Latest = new ExchangeRates(rates.Select(r => new ExchangeRate(state.ExchangeName, r.Pair, r.BidAsk))),
                     Updated = updated,
                     NextRefresh = updated + RefreshRate,
                     Expiration = updated + ValidatyTime
@@ -130,9 +139,6 @@ namespace BTCPayServer.Services.Rates
         }
 
         TimeSpan _RefreshRate = TimeSpan.FromSeconds(30);
-        /// <summary>
-        /// The timespan after which <see cref="UpdateIfNecessary(CancellationToken)"/> will get the rates from the underlying rate provider
-        /// </summary>
         public TimeSpan RefreshRate
         {
             get
@@ -150,9 +156,6 @@ namespace BTCPayServer.Services.Rates
         }
 
         TimeSpan _ValidatyTime = TimeSpan.FromMinutes(10);
-        /// <summary>
-        /// The timespan after which calls to <see cref="GetRatesAsync(CancellationToken)"/> will query underlying provider if the rate has not been updated
-        /// </summary>
         public TimeSpan ValidatyTime
         {
             get
@@ -198,7 +201,7 @@ namespace BTCPayServer.Services.Rates
         }
 
         LatestFetch _Latest;
-        public async Task<PairRate[]> GetRatesAsync(CancellationToken cancellationToken)
+        public async Task<ExchangeRates> GetRatesAsync(CancellationToken cancellationToken)
         {
             LastRequested = DateTimeOffset.UtcNow;
             var latest = _Latest;
@@ -214,6 +217,7 @@ namespace BTCPayServer.Services.Rates
         /// </summary>
         public DateTimeOffset? LastRequested { get; set; }
 
+        public string ExchangeName { get; }
         public DateTimeOffset? Expiration
         {
             get
@@ -231,6 +235,7 @@ namespace BTCPayServer.Services.Rates
             cancellationToken.ThrowIfCancellationRequested();
             var previous = _Latest;
             var fetch = new LatestFetch();
+            fetch.ExchangeName = ExchangeName;
             try
             {
                 var rates = await _Inner.GetRatesAsync(cancellationToken);

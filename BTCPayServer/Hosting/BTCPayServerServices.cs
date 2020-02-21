@@ -2,6 +2,7 @@
 using BTCPayServer.Services.Altcoins.Monero;
 using Microsoft.Extensions.Logging;
 using System;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.AspNetCore.Http;
@@ -47,6 +48,7 @@ using System.Diagnostics;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BTCPayServer.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Routing;
@@ -61,7 +63,11 @@ namespace BTCPayServer.Hosting
     {
         public static IServiceCollection AddBTCPayServer(this IServiceCollection services, IConfiguration configuration)
         {
+#if NETCOREAPP21
+            services.AddSingleton<MvcNewtonsoftJsonOptions>();
+#else
 			services.AddSingleton<MvcNewtonsoftJsonOptions>(o =>  o.GetRequiredService<IOptions<MvcNewtonsoftJsonOptions>>().Value);
+#endif
             services.AddDbContext<ApplicationDbContext>((provider, o) =>
             {
                 var factory = provider.GetRequiredService<ApplicationDbContextFactory>();
@@ -97,6 +103,7 @@ namespace BTCPayServer.Hosting
             services.TryAddSingleton<EventAggregator>();
             services.TryAddSingleton<PaymentRequestService>();
             services.TryAddSingleton<U2FService>();
+            services.TryAddSingleton<CoinAverageSettings>();
             services.TryAddSingleton<ApplicationDbContextFactory>(o => 
             {
                 var opts = o.GetRequiredService<BTCPayServerOptions>();
@@ -177,7 +184,6 @@ namespace BTCPayServer.Hosting
             services.TryAddSingleton<StoreRepository>();
             services.TryAddSingleton<PaymentRequestRepository>();
             services.TryAddSingleton<BTCPayWalletProvider>();
-            services.TryAddSingleton<WalletReceiveStateService>();
             services.TryAddSingleton<CurrencyNameTable>();
             services.TryAddSingleton<IFeeProviderFactory>(o => new NBXplorerFeeProviderFactory(o.GetRequiredService<ExplorerClientProvider>())
             {
@@ -217,7 +223,6 @@ namespace BTCPayServer.Hosting
             services.AddSingleton<IHostedService, DynamicDnsHostedService>();
             services.AddSingleton<IHostedService, TorServicesHostedService>();
             services.AddSingleton<IHostedService, PaymentRequestStreamer>();
-            services.AddSingleton<IHostedService, WalletReceiveCacheUpdater>();
             services.AddSingleton<IBackgroundJobClient, BackgroundJobClient>();
             services.AddScoped<IAuthorizationHandler, CookieAuthorizationHandler>();
             services.AddScoped<IAuthorizationHandler, OpenIdAuthorizationHandler>();
@@ -260,20 +265,10 @@ namespace BTCPayServer.Hosting
             {
                 options.AddPolicy(CorsPolicies.All, p => p.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
             });
-            services.AddSingleton(provider =>
-            {
-                var btcPayEnv = provider.GetService<BTCPayServerEnvironment>();
-                var rateLimits = new RateLimitService();
-                if (btcPayEnv.IsDevelopping)
-                {
-                    rateLimits.SetZone($"zone={ZoneLimits.Login} rate=1000r/min burst=100 nodelay");
-                }
-                else
-                {
-                    rateLimits.SetZone($"zone={ZoneLimits.Login} rate=5r/min burst=3 nodelay");
-                }
-                return rateLimits;
-            });
+
+            var rateLimits = new RateLimitService();
+            rateLimits.SetZone($"zone={ZoneLimits.Login} rate=5r/min burst=3 nodelay");
+            services.AddSingleton(rateLimits);
 
 
             services.AddLogging(logBuilder =>
@@ -286,7 +281,7 @@ namespace BTCPayServer.Hosting
                         .MinimumLevel.Is(BTCPayServerOptions.GetDebugLogLevel(configuration))
                         .WriteTo.File(debugLogFile, rollingInterval: RollingInterval.Day, fileSizeLimitBytes: MAX_DEBUG_LOG_FILE_SIZE, rollOnFileSizeLimit: true, retainedFileCountLimit: 1)
                         .CreateLogger();
-                    logBuilder.AddProvider(new Serilog.Extensions.Logging.SerilogLoggerProvider(Log.Logger));
+                    logBuilder.AddSerilog(Serilog.Log.Logger);
                 }
             });
             return services;

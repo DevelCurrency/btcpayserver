@@ -24,14 +24,9 @@ namespace BTCPayServer.Services.Altcoins.Monero.Payments
             return JsonConvert.SerializeObject(paymentData);
         }
 
-        public override IPaymentMethodDetails DeserializePaymentMethodDetails(BTCPayNetworkBase network, string str)
+        public override IPaymentMethodDetails DeserializePaymentMethodDetails(string str)
         {
             return JsonConvert.DeserializeObject<MoneroLikeOnChainPaymentMethodDetails>(str);
-        }
-
-        public override string SerializePaymentMethodDetails(BTCPayNetworkBase network, IPaymentMethodDetails details)
-        {
-            return JsonConvert.SerializeObject(details);
         }
 
         public override ISupportedPaymentMethod DeserializeSupportedPaymentMethod(BTCPayNetworkBase network, JToken value)

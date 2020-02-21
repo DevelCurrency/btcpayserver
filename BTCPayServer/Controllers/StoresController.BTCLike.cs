@@ -9,7 +9,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using BTCPayServer.Data;
-using BTCPayServer.Events;
 using BTCPayServer.Models;
 using BTCPayServer.Models.StoreViewModels;
 using BTCPayServer.Payments;
@@ -118,8 +117,7 @@ namespace BTCPayServer.Controllers
                     {
                         UTF8Encoding UTF8NOBOM = new UTF8Encoding(false);
                         var bytes = UTF8NOBOM.GetBytes(JsonConvert.SerializeObject(result, network.NBXplorerNetwork.JsonSerializerSettings));
-                        using var cts = new CancellationTokenSource(2000);
-                        await webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cts.Token);
+                        await webSocket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, new CancellationTokenSource(2000).Token);
                     }
                 }
                 catch { }
@@ -268,11 +266,6 @@ namespace BTCPayServer.Controllers
                 }
 
                 await _Repo.UpdateStore(store);
-                _EventAggregator.Publish(new WalletChangedEvent()
-                {
-                    WalletId = new WalletId(storeId, cryptoCode)
-                });
-                    
                 if (willBeExcluded != wasExcluded)
                 {
                     var label = willBeExcluded ? "disabled" : "enabled";

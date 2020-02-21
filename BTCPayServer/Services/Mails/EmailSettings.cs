@@ -52,9 +52,10 @@ namespace BTCPayServer.Services.Mails
 
         public bool IsComplete()
         {
+            SmtpClient smtp = null;
             try
             {
-                using var smtp = CreateSmtpClient();
+                smtp = CreateSmtpClient();
                 return true;
             }
             catch { }

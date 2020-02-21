@@ -42,11 +42,11 @@ namespace BTCPayServer.Payments.Changelly
 
         private async Task<ChangellyResponse<T>> PostToApi<T>(string message)
         {
-                using var hmac = new HMACSHA512(Encoding.UTF8.GetBytes(_apisecret));
+                var hmac = new HMACSHA512(Encoding.UTF8.GetBytes(_apisecret));
                 var hashMessage = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));
                 var sign = ToHexString(hashMessage);
 
-                using var request = new HttpRequestMessage(HttpMethod.Post, "");
+                var request = new HttpRequestMessage(HttpMethod.Post, "");
                 request.Headers.Add("sign", sign);
                 request.Content = new StringContent(message, Encoding.UTF8, "application/json");
 

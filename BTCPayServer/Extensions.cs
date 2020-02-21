@@ -41,10 +41,12 @@ namespace BTCPayServer
 {
     public static class Extensions
     {
+#if !NETCOREAPP21
         public static IQueryable<TEntity> Where<TEntity>(this Microsoft.EntityFrameworkCore.DbSet<TEntity> obj, System.Linq.Expressions.Expression<Func<TEntity, bool>> predicate) where TEntity : class
         {
             return System.Linq.Queryable.Where(obj, predicate);
         }
+#endif
 
         public static string Truncate(this string value, int maxLength)
         {
@@ -126,11 +128,9 @@ namespace BTCPayServer
             {
                 if (webSocket.State == WebSocketState.Open)
                 {
-                    using (CancellationTokenSource cts = new CancellationTokenSource())
-                    {
-                        cts.CancelAfter(5000);
-                        await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
-                    }
+                    CancellationTokenSource cts = new CancellationTokenSource();
+                    cts.CancelAfter(5000);
+                    await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", cts.Token);
                 }
             }
             catch { }
@@ -186,19 +186,11 @@ namespace BTCPayServer
 
         public static bool IsSegwit(this DerivationStrategyBase derivationStrategyBase)
         {
-            return ScriptPubKeyType(derivationStrategyBase) != NBitcoin.ScriptPubKeyType.Legacy;
-        }
-        public static ScriptPubKeyType ScriptPubKeyType(this DerivationStrategyBase derivationStrategyBase)
-        {
             if (IsSegwitCore(derivationStrategyBase))
-            {
-                return NBitcoin.ScriptPubKeyType.Segwit;
-            }
-
-            return (derivationStrategyBase is P2SHDerivationStrategy p2shStrat && IsSegwitCore(p2shStrat.Inner))
-                ? NBitcoin.ScriptPubKeyType.SegwitP2SH
-                : NBitcoin.ScriptPubKeyType.Legacy;
+                return true;
+            return (derivationStrategyBase is P2SHDerivationStrategy p2shStrat && IsSegwitCore(p2shStrat.Inner));
         }
+
         private static bool IsSegwitCore(DerivationStrategyBase derivationStrategyBase)
         {
             return (derivationStrategyBase is P2WSHDerivationStrategy) ||
@@ -265,12 +257,6 @@ namespace BTCPayServer
                 return false;
             return request.Host.Host.EndsWith(".onion", StringComparison.OrdinalIgnoreCase);
         }
-        
-        public static bool IsOnion(this Uri uri)
-        {
-            return uri?.DnsSafeHost?.EndsWith(".onion", StringComparison.OrdinalIgnoreCase) is true;
-        }
-
 
         public static string GetAbsoluteRoot(this HttpRequest request)
         {

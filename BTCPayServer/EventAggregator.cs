@@ -63,8 +63,8 @@ namespace BTCPayServer
         public async Task<T> WaitNext<T>(Func<T, bool> predicate, CancellationToken cancellation = default(CancellationToken))
         {
             TaskCompletionSource<T> tcs = new TaskCompletionSource<T>();
-            using var subscription = Subscribe<T>((a, b) => { if (predicate(b)) { tcs.TrySetResult(b); a.Unsubscribe(); } });
-            using (cancellation.Register(() => { tcs.TrySetCanceled(); }))
+            var subscription = Subscribe<T>((a, b) => { if (predicate(b)) { tcs.TrySetResult(b); a.Unsubscribe(); } });
+            using (cancellation.Register(() => { tcs.TrySetCanceled(); subscription.Unsubscribe(); }))
             {
                 return await tcs.Task.ConfigureAwait(false);
             }

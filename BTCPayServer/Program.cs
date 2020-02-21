@@ -29,7 +29,7 @@ namespace BTCPayServer
             IWebHost host = null;
             var processor = new ConsoleLoggerProcessor();
             CustomConsoleLogProvider loggerProvider = new CustomConsoleLogProvider(processor);
-            using var loggerFactory = new LoggerFactory();
+            var loggerFactory = new LoggerFactory();
             loggerFactory.AddProvider(loggerProvider);
             var logger = loggerFactory.CreateLogger("Configuration");
             try

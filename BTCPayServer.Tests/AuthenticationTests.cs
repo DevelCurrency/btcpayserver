@@ -6,6 +6,8 @@ using System.Net;
 using System.Threading.Tasks;
 using System.Security.Claims;
 using BTCPayServer.Tests.Logging;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Xunit;
 using Xunit.Abstractions;
 using System.Net.Http;
@@ -64,7 +66,8 @@ namespace BTCPayServer.Tests
                     {
                         var json = await streamToReadFrom.ReadToEndAsync();
                         Assert.NotNull(json);
-                        JObject.Parse(json); // Should do more tests but good enough
+                        var configuration = OpenIdConnectConfiguration.Create(json);
+                        Assert.NotNull(configuration);
                     }
                 }
             }
@@ -246,7 +249,7 @@ namespace BTCPayServer.Tests
                 Assert.True(response.IsSuccessStatusCode);
 
                 string content = await response.Content.ReadAsStringAsync();
-                var result = System.Text.Json.JsonSerializer.Deserialize<OpenIddictResponse>(content);
+                var result = JObject.Parse(content).ToObject<OpenIddictResponse>();
 
                 await TestApiAgainstAccessToken(result.AccessToken, tester, user);
 
@@ -286,7 +289,7 @@ namespace BTCPayServer.Tests
             Assert.True(response.IsSuccessStatusCode);
 
             string content = await response.Content.ReadAsStringAsync();
-            var result = System.Text.Json.JsonSerializer.Deserialize<OpenIddictResponse>(content);
+            var result = JObject.Parse(content).ToObject<OpenIddictResponse>();
             Assert.NotEmpty(result.AccessToken);
             Assert.Null(result.Error);
             return result.AccessToken;
@@ -327,7 +330,7 @@ namespace BTCPayServer.Tests
             Assert.True(response.IsSuccessStatusCode);
 
             string content = await response.Content.ReadAsStringAsync();
-            var result = System.Text.Json.JsonSerializer.Deserialize<OpenIddictResponse>(content);
+            var result = JObject.Parse(content).ToObject<OpenIddictResponse>();
             Assert.NotEmpty(result.AccessToken);
             Assert.Null(result.Error);
             return result.AccessToken;
@@ -368,7 +371,7 @@ namespace BTCPayServer.Tests
             Assert.True(response.IsSuccessStatusCode);
 
             string content = await response.Content.ReadAsStringAsync();
-            var result = System.Text.Json.JsonSerializer.Deserialize<OpenIddictResponse>(content);
+            var result = JObject.Parse(content).ToObject<OpenIddictResponse>();
             Assert.NotEmpty(result.AccessToken);
             Assert.Null(result.Error);
             return result.AccessToken;

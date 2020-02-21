@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Threading.Tasks;
 using BTCPayServer.Rating;
 using BTCPayServer.Services.Rates;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -16,27 +17,20 @@ namespace BTCPayServer.Models.StoreViewModels
             public string Rule { get; set; }
             public bool Error { get; set; }
         }
-        public void SetExchangeRates(IEnumerable<AvailableRateProvider> supportedList, string preferredExchange)
+        class Format
         {
-            var defaultStore = preferredExchange ?? CoinGeckoRateProvider.CoinGeckoName;
-            supportedList = supportedList.Select(a => new AvailableRateProvider(a.Id, a.SourceId, GetName(a), a.Url, a.Source)).ToArray();
-            var chosen = supportedList.FirstOrDefault(f => f.Id == defaultStore) ?? supportedList.FirstOrDefault();
-            Exchanges = new SelectList(supportedList, nameof(chosen.Id), nameof(chosen.Name), chosen);
-            PreferredExchange = chosen.Id;
-            RateSource = chosen.Url;
+            public string Name { get; set; }
+            public string Value { get; set; }
+            public string Url { get; set; }
         }
-
-        private string GetName(AvailableRateProvider a)
+        public void SetExchangeRates(CoinAverageExchange[] supportedList, string preferredExchange)
         {
-            switch (a.Source)
-            {
-                case Rating.RateSource.Direct:
-                    return a.Name;
-                case Rating.RateSource.Coingecko:
-                    return $"{a.Name} (via CoinGecko)";
-                default:
-                    throw new NotSupportedException(a.Source.ToString());
-            }
+            var defaultStore = preferredExchange ?? CoinAverageRateProvider.CoinAverageName;
+            var choices = supportedList.Select(o => new Format() { Name = o.Display, Value = o.Name, Url = o.Url }).ToArray();
+            var chosen = choices.FirstOrDefault(f => f.Value == defaultStore) ?? choices.FirstOrDefault();
+            Exchanges = new SelectList(choices, nameof(chosen.Value), nameof(chosen.Name), chosen);
+            PreferredExchange = chosen.Value;
+            RateSource = chosen.Url;
         }
 
         public List<TestResultViewModel> TestRateRules { get; set; }
@@ -52,7 +46,7 @@ namespace BTCPayServer.Models.StoreViewModels
         public string ScriptTest { get; set; }
         public string DefaultCurrencyPairs { get; set; }
         public string StoreId { get; set; }
-        public IEnumerable<AvailableRateProvider> AvailableExchanges { get; set; }
+        public CoinAverageExchange[] AvailableExchanges { get; set; }
 
         [Display(Name = "Add a spread on exchange rate of ... %")]
         [Range(0.0, 100.0)]

@@ -304,7 +304,7 @@ namespace BTCPayServer.Services.Apps
         {
             if (string.IsNullOrWhiteSpace(template))
                 return Array.Empty<ViewPointOfSaleViewModel.Item>();
-            using var input = new StringReader(template);
+            var input = new StringReader(template);
             YamlStream stream = new YamlStream();
             stream.Load(input);
             var root = (YamlMappingNode)stream.Documents[0].RootNode;

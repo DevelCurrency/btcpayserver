@@ -3,7 +3,8 @@
   <Import Project="../Build/Common.csproj" />
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="NBXplorer.Client" Version="3.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.App" Version="2.1.14" Condition="'$(TargetFramework)' == 'netcoreapp2.1'" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" Condition="'$(TargetFramework)' != 'netcoreapp2.1'" />
+    <PackageReference Include="NBXplorer.Client.DevelCurrency" Version="3.0.2" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,9 @@
 ﻿using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.DataProtection;
+#if NETCOREAPP21
+using IWebHostEnvironment = Microsoft.AspNetCore.Hosting.IHostingEnvironment;
+#else
 using Microsoft.Extensions.Hosting;
+#endif
 using OpenIddict.Validation.AspNetCore;
 using OpenIddict.Abstractions;
 using Microsoft.AspNetCore.Builder;
@@ -50,9 +53,6 @@ namespace BTCPayServer.Hosting
             Logs.Configure(LoggerFactory);
             services.ConfigureBTCPayServer(Configuration);
             services.AddMemoryCache();
-            services.AddDataProtection()
-                .SetApplicationName("BTCPay Server")
-                .PersistKeysToFileSystem(GetDataDir());
             services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
                 .AddDefaultTokenProviders();
@@ -78,9 +78,8 @@ namespace BTCPayServer.Hosting
                 //    ScriptSrc = "'self' 'unsafe-inline'"
                 //});
             })
+#if !NETCOREAPP21
             .AddNewtonsoftJson()
-#if DEBUG
-            .AddRazorRuntimeCompilation()
 #endif
             .AddControllersAsServices();
             services.TryAddScoped<ContentSecurityPolicies>();
@@ -144,11 +143,6 @@ namespace BTCPayServer.Hosting
             }
         }
 
-        private DirectoryInfo GetDataDir()
-        {
-            return new DirectoryInfo(Configuration.GetDataDir(DefaultConfiguration.GetNetworkType(Configuration)));
-        }
-
         private void ConfigureOpenIddict(IServiceCollection services)
         {
             // Register the OpenIddict services.
@@ -167,7 +161,8 @@ namespace BTCPayServer.Hosting
                         .EnableStatusCodePagesIntegration()
                         .EnableAuthorizationEndpointPassthrough()
                         .EnableLogoutEndpointPassthrough()
-                        .EnableAuthorizationEndpointCaching()
+                        .EnableTokenEndpointPassthrough()
+                        .EnableRequestCaching()
                         .DisableTransportSecurityRequirement();
 
                     // Enable the token endpoint (required to use the password flow).
@@ -241,22 +236,36 @@ namespace BTCPayServer.Hosting
             forwardingOptions.KnownProxies.Clear();
             forwardingOptions.ForwardedHeaders = ForwardedHeaders.All;
             app.UseForwardedHeaders(forwardingOptions);
-
-
-            app.UseStatusCodePagesWithReExecute("/Error/Handle", "?statusCode={0}");
-
             app.UsePayServer();
+#if !NETCOREAPP21
             app.UseRouting();
+#endif
             app.UseCors();
 
             app.UseStaticFiles();
             app.UseProviderStorage(options);
             app.UseAuthentication();
+#if !NETCOREAPP21
             app.UseAuthorization();
+#endif
             app.UseSession();
-
+#if NETCOREAPP21
+            app.UseSignalR(route =>
+            {
+                AppHub.Register(route);
+                PaymentRequestHub.Register(route);
+            });
+#endif
             app.UseWebSockets();
-
+            app.UseStatusCodePages();
+#if NETCOREAPP21
+            app.UseMvc(routes =>
+            {
+                routes.MapRoute(
+                    name: "default",
+                    template: "{controller=Home}/{action=Index}/{id?}");
+            });
+#else
             app.UseEndpoints(endpoints =>
             {
                 AppHub.Register(endpoints);
@@ -264,6 +273,7 @@ namespace BTCPayServer.Hosting
                 endpoints.MapControllers();
                 endpoints.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
             });
+#endif
         }
     }
 }

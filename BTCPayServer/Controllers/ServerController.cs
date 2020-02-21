@@ -84,6 +84,76 @@ namespace BTCPayServer.Controllers
             _sshState = sshState;
         }
 
+        [Route("server/rates")]
+        public async Task<IActionResult> Rates()
+        {
+            var rates = (await _SettingsRepository.GetSettingAsync<RatesSetting>()) ?? new RatesSetting();
+
+            var vm = new RatesViewModel()
+            {
+                CacheMinutes = rates.CacheInMinutes,
+                PrivateKey = rates.PrivateKey,
+                PublicKey = rates.PublicKey
+            };
+            await FetchRateLimits(vm);
+            return View(vm);
+        }
+
+        private static async Task FetchRateLimits(RatesViewModel vm)
+        {
+            var coinAverage = GetCoinaverageService(vm, false);
+            if (coinAverage != null)
+            {
+                try
+                {
+                    vm.RateLimits = await coinAverage.GetRateLimitsAsync();
+                }
+                catch { }
+            }
+        }
+
+        [Route("server/rates")]
+        [HttpPost]
+        public async Task<IActionResult> Rates(RatesViewModel vm)
+        {
+            var rates = (await _SettingsRepository.GetSettingAsync<RatesSetting>()) ?? new RatesSetting();
+            rates.PrivateKey = vm.PrivateKey;
+            rates.PublicKey = vm.PublicKey;
+            rates.CacheInMinutes = vm.CacheMinutes;
+            try
+            {
+                var service = GetCoinaverageService(vm, true);
+                if (service != null)
+                    await service.TestAuthAsync();
+            }
+            catch
+            {
+                ModelState.AddModelError(nameof(vm.PrivateKey), "Invalid API key pair");
+            }
+            if (!ModelState.IsValid)
+            {
+                await FetchRateLimits(vm);
+                return View(vm);
+            }
+            await _SettingsRepository.UpdateSetting(rates);
+            TempData[WellKnownTempData.SuccessMessage] = "Rate settings successfully updated";
+            return RedirectToAction(nameof(Rates));
+        }
+
+        private static CoinAverageRateProvider GetCoinaverageService(RatesViewModel vm, bool withAuth)
+        {
+            var settings = new CoinAverageSettings()
+            {
+                KeyPair = (vm.PublicKey, vm.PrivateKey)
+            };
+            if (!withAuth || settings.GetCoinAverageSignature() != null)
+            {
+                return new CoinAverageRateProvider()
+                { Authenticator = settings };
+            }
+            return null;
+        }
+
         [Route("server/users")]
         public IActionResult ListUsers(int skip = 0, int count = 50)
         {
@@ -528,12 +598,10 @@ namespace BTCPayServer.Controllers
             return null;
         }
 
-
-        
-        [Route("server/services/{serviceName}/{cryptoCode?}")]
+        [Route("server/services/{serviceName}/{cryptoCode}")]
         public async Task<IActionResult> Service(string serviceName, string cryptoCode, bool showQR = false, uint? nonce = null)
         {
-            if (!string.IsNullOrEmpty(cryptoCode) && !_dashBoard.IsFullySynched(cryptoCode, out _))
+            if (!_dashBoard.IsFullySynched(cryptoCode, out _))
             {
                 TempData[WellKnownTempData.ErrorMessage] = $"{cryptoCode} is not fully synched";
                 return RedirectToAction(nameof(Services));
@@ -544,7 +612,6 @@ namespace BTCPayServer.Controllers
 
             try
             {
-                
                 if (service.Type == ExternalServiceTypes.P2P)
                 {
                     return View("P2PService", new LightningWalletServices()
@@ -595,19 +662,9 @@ namespace BTCPayServer.Controllers
                         vm.WalletName = service.DisplayName;
                         vm.ServiceLink = $"{connectionString.Server}?access-key={connectionString.AccessKey}";
                         return View("LightningWalletServices", vm);
-                    case ExternalServiceTypes.CLightningRest:
-                        return LndServices(service, connectionString, nonce, "CLightningRestServices");
                     case ExternalServiceTypes.LNDGRPC:
                     case ExternalServiceTypes.LNDRest:
                         return LndServices(service, connectionString, nonce);
-                    case ExternalServiceTypes.Configurator:
-                        return View("ConfiguratorService",
-                            new LightningWalletServices()
-                            {
-                                ShowQR = showQR,
-                                WalletName = service.ServiceName,
-                                ServiceLink = $"{connectionString.Server}?password={connectionString.AccessKey}"
-                            });
                     default:
                         throw new NotSupportedException(service.Type.ToString());
                 }
@@ -676,7 +733,7 @@ namespace BTCPayServer.Controllers
             return View(nameof(LightningChargeServices), vm);
         }
 
-        private IActionResult LndServices(ExternalService service, ExternalConnectionString connectionString, uint? nonce, string view = nameof(LndServices))
+        private IActionResult LndServices(ExternalService service, ExternalConnectionString connectionString, uint? nonce)
         {
             var model = new LndServicesViewModel();
             if (service.Type == ExternalServiceTypes.LNDGRPC)
@@ -686,7 +743,7 @@ namespace BTCPayServer.Controllers
                 model.ConnectionType = "GRPC";
                 model.GRPCSSLCipherSuites = "ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES128-SHA256";
             }
-            else if (service.Type == ExternalServiceTypes.LNDRest || service.Type == ExternalServiceTypes.CLightningRest)
+            else if (service.Type == ExternalServiceTypes.LNDRest)
             {
                 model.Uri = connectionString.Server.AbsoluteUri;
                 model.ConnectionType = "REST";
@@ -715,7 +772,7 @@ namespace BTCPayServer.Controllers
                 }
             }
 
-            return View(view, model);
+            return View(nameof(LndServices), model);
         }
 
         private static uint GetConfigKey(string type, string serviceName, string cryptoCode, uint nonce)
@@ -767,10 +824,10 @@ namespace BTCPayServer.Controllers
                 grpcConf.SSL = connectionString.Server.Scheme == "https";
                 confs.Configurations.Add(grpcConf);
             }
-            else if (service.Type == ExternalServiceTypes.LNDRest || service.Type == ExternalServiceTypes.CLightningRest)
+            else if (service.Type == ExternalServiceTypes.LNDRest)
             {
                 var restconf = new LNDRestConfiguration();
-                restconf.Type = service.Type  == ExternalServiceTypes.LNDRest? "lnd-rest": "clightning-rest";
+                restconf.Type = "lnd-rest";
                 restconf.Uri = connectionString.Server.AbsoluteUri;
                 confs.Configurations.Add(restconf);
             }
@@ -790,6 +847,7 @@ namespace BTCPayServer.Controllers
             _LnConfigProvider.KeepConfig(configKey, confs);
             return RedirectToAction(nameof(Service), new { cryptoCode = cryptoCode, serviceName = serviceName, nonce = nonce });
         }
+
 
         [Route("server/services/dynamic-dns")]
         public async Task<IActionResult> DynamicDnsServices()
@@ -1063,11 +1121,9 @@ namespace BTCPayServer.Controllers
             {
                 try
                 {
-                    using (var client = model.Settings.CreateSmtpClient())
-                    using (var message = model.Settings.CreateMailMessage(new MailAddress(model.TestEmail), "BTCPay test", "BTCPay test"))
-                    {
-                        await client.SendMailAsync(message);
-                    }
+                    var client = model.Settings.CreateSmtpClient();
+                    var message = model.Settings.CreateMailMessage(new MailAddress(model.TestEmail), "BTCPay test", "BTCPay test");
+                    await client.SendMailAsync(message);
                     TempData[WellKnownTempData.SuccessMessage] = "Email sent to " + model.TestEmail + ", please, verify you received it";
                 }
                 catch (Exception ex)

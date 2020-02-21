@@ -85,15 +85,7 @@ namespace BTCPayServer.Services
                 catch (DbUpdateException) // Does not exists
                 {
                     entity.State = EntityState.Added;
-                    try
-                    {
-                        await ctx.SaveChangesAsync();
-                    }
-                    catch(DbUpdateException) // the Wallet does not exists in the DB
-                    {
-                        await SetWalletInfo(walletId, new WalletBlobInfo());
-                        await ctx.SaveChangesAsync();
-                    }
+                    await ctx.SaveChangesAsync();
                 }
             }
         }

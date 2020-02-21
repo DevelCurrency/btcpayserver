@@ -52,6 +52,7 @@ namespace BTCPayServer
             InitLitecoin();
             InitBitcore();
             InitDogecoin();
+            InitBuyCoinPos();
             InitBitcoinGold();
             InitMonacoin();
             InitDash();
@@ -59,8 +60,7 @@ namespace BTCPayServer
             InitGroestlcoin();
             InitViacoin();
             InitMonero();
-            InitPolis();
-
+            
             // Assume that electrum mappings are same as BTC if not specified
             foreach (var network in _Networks.Values.OfType<BTCPayNetwork>())
             {
@@ -78,6 +78,7 @@ namespace BTCPayServer
             }
 
             // Disabled because of https://twitter.com/Cryptopia_NZ/status/1085084168852291586
+            //InitPolis();
             //InitBitcoinplus();
             //InitUfo();
         }

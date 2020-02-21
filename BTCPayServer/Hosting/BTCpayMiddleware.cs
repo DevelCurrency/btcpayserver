@@ -62,12 +62,10 @@ namespace BTCPayServer.Hosting
             catch (UnauthorizedAccessException ex)
             {
                 await HandleBitpayHttpException(httpContext, new BitpayHttpException(401, ex.Message));
-                return;
             }
             catch (BitpayHttpException ex)
             {
                 await HandleBitpayHttpException(httpContext, ex);
-                return;
             }
             catch (Exception ex)
             {
@@ -135,9 +133,13 @@ namespace BTCPayServer.Hosting
         private static async Task HandleBitpayHttpException(HttpContext httpContext, BitpayHttpException ex)
         {
             httpContext.Response.StatusCode = ex.StatusCode;
-            httpContext.Response.ContentType = "application/json";
-            var result = JsonConvert.SerializeObject(new BitpayErrorsModel(ex));
-            await httpContext.Response.WriteAsync(result);
+            using (var writer = new StreamWriter(httpContext.Response.Body, new UTF8Encoding(false), 1024, true))
+            {
+                httpContext.Response.ContentType = "application/json";
+                var result = JsonConvert.SerializeObject(new BitpayErrorsModel(ex));
+                writer.Write(result);
+                await writer.FlushAsync();
+            }
         }
     }
 }

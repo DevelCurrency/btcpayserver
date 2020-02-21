@@ -19,6 +19,9 @@ using System.Globalization;
 using BTCPayServer.Security;
 using BTCPayServer.U2F;
 using BTCPayServer.Data;
+#if NETCOREAPP21
+using IWebHostEnvironment = Microsoft.AspNetCore.Hosting.IHostingEnvironment;
+#endif
 
 namespace BTCPayServer.Controllers
 {
@@ -32,7 +35,7 @@ namespace BTCPayServer.Controllers
         private readonly ILogger _logger;
         private readonly UrlEncoder _urlEncoder;
         IWebHostEnvironment _Env;
-        public U2FService _u2FService;
+        private readonly U2FService _u2FService;
         private readonly BTCPayServerEnvironment _btcPayServerEnvironment;
         StoreRepository _StoreRepository;
 

@@ -48,9 +48,9 @@ namespace BTCPayServer
                 throw new FormatException();
             }
             if (type == DerivationType.Segwit)
-                return new DirectDerivationStrategy(extPubKey, true);
+                return new DirectDerivationStrategy(extPubKey) { Segwit = true };
             if (type == DerivationType.Legacy)
-                return new DirectDerivationStrategy(extPubKey, false);
+                return new DirectDerivationStrategy(extPubKey) { Segwit = false };
             if (type == DerivationType.SegwitP2SH)
                 return BtcPayNetwork.NBXplorerNetwork.DerivationStrategyFactory.Parse(extPubKey.ToString() + "-[p2sh]");
             throw new FormatException();
@@ -79,10 +79,7 @@ namespace BTCPayServer
             }
 
             if (!Network.Consensus.SupportSegwit)
-            {
                 hintedLabels.Add("legacy");
-                str = str.Replace("-[p2sh]", string.Empty, StringComparison.OrdinalIgnoreCase);
-            }
 
             try
             {

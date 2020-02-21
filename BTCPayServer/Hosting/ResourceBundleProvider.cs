@@ -6,8 +6,12 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using BundlerMinifier.TagHelpers;
+#if NETCOREAPP21
+using IWebHostEnvironment = Microsoft.AspNetCore.Hosting.IHostingEnvironment;
+#else
 using Newtonsoft.Json.Serialization;
 using Microsoft.AspNetCore.Hosting;
+#endif
 using Newtonsoft.Json.Linq;
 
 namespace BTCPayServer.Hosting

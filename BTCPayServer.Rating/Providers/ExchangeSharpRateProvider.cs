@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using BTCPayServer.Rating;
@@ -12,15 +11,18 @@ using ExchangeSharp;
 
 namespace BTCPayServer.Services.Rates
 {
-    public class ExchangeSharpRateProvider<T> : IRateProvider where T : ExchangeAPI, new()
+    public class ExchangeSharpRateProvider : IRateProvider, IHasExchangeName
     {
-        HttpClient _httpClient;
-        public ExchangeSharpRateProvider(HttpClient httpClient, bool reverseCurrencyPair = false)
+        readonly ExchangeAPI _ExchangeAPI;
+        readonly string _ExchangeName;
+        public ExchangeSharpRateProvider(string exchangeName, ExchangeAPI exchangeAPI, bool reverseCurrencyPair = false)
         {
-            if (httpClient == null)
-                throw new ArgumentNullException(nameof(httpClient));
+            if (exchangeAPI == null)
+                throw new ArgumentNullException(nameof(exchangeAPI));
+            exchangeAPI.RequestTimeout = TimeSpan.FromSeconds(5.0);
+            _ExchangeAPI = exchangeAPI;
+            _ExchangeName = exchangeName;
             ReverseCurrencyPair = reverseCurrencyPair;
-            _httpClient = httpClient;
         }
 
         public bool ReverseCurrencyPair
@@ -28,42 +30,45 @@ namespace BTCPayServer.Services.Rates
             get; set;
         }
 
-        public async Task<PairRate[]> GetRatesAsync(CancellationToken cancellationToken)
+        public string ExchangeName => _ExchangeName;
+
+        public async Task<ExchangeRates> GetRatesAsync(CancellationToken cancellationToken)
         {
             await new SynchronizationContextRemover();
+            var rates = await _ExchangeAPI.GetTickersAsync();
 
-            var exchangeAPI = new T();
-            exchangeAPI.RequestMaker = new HttpClientRequestMaker(exchangeAPI, _httpClient, cancellationToken);
-            var rates = await exchangeAPI.GetTickersAsync();
+                var exchangeRateTasks = rates
+                    .Where(t => t.Value.Ask != 0m && t.Value.Bid != 0m)
+                    .Select(t => CreateExchangeRate(t));
 
-            var exchangeRateTasks = rates
-                .Where(t => t.Value.Ask != 0m && t.Value.Bid != 0m)
-                .Select(t => CreateExchangeRate(exchangeAPI, t));
-
-            var exchangeRates = await Task.WhenAll(exchangeRateTasks);
-
-            return exchangeRates
+                var exchangeRates = await Task.WhenAll(exchangeRateTasks);
+                
+            return new ExchangeRates(exchangeRates
                 .Where(t => t != null)
-                .ToArray();
+                .ToArray());
         }
 
         // ExchangeSymbolToGlobalSymbol throws exception which would kill perf
         ConcurrentDictionary<string, string> notFoundSymbols = new ConcurrentDictionary<string, string>();
-        private async Task<PairRate> CreateExchangeRate(T exchangeAPI, KeyValuePair<string, ExchangeTicker> ticker)
+        private async Task<ExchangeRate> CreateExchangeRate(KeyValuePair<string, ExchangeTicker> ticker)
         {
             if (notFoundSymbols.TryGetValue(ticker.Key, out _))
                 return null;
             try
             {
-                var tickerName = await exchangeAPI.ExchangeMarketSymbolToGlobalMarketSymbolAsync(ticker.Key);
+                var tickerName = await _ExchangeAPI.ExchangeMarketSymbolToGlobalMarketSymbolAsync(ticker.Key);
                 if (!CurrencyPair.TryParse(tickerName, out var pair))
                 {
                     notFoundSymbols.TryAdd(ticker.Key, ticker.Key);
                     return null;
                 }
-                if (ReverseCurrencyPair)
+                if(ReverseCurrencyPair)
                     pair = new CurrencyPair(pair.Right, pair.Left);
-                return new PairRate(pair, new BidAsk(ticker.Value.Bid, ticker.Value.Ask));
+                var rate = new ExchangeRate();
+                rate.CurrencyPair = pair;
+                rate.Exchange = _ExchangeName;
+                rate.BidAsk = new BidAsk(ticker.Value.Bid, ticker.Value.Ask);
+                return rate;
             }
             catch (ArgumentException)
             {

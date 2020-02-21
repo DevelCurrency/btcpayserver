@@ -22,6 +22,7 @@ using OpenIddict.Abstractions;
 using OpenIddict.Core;
 using OpenIddict.Server;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using OpenIddict.Server.AspNetCore;
 
 namespace BTCPayServer.Controllers
@@ -125,7 +126,7 @@ namespace BTCPayServer.Controllers
             {
                 var application = await _applicationManager.FindByClientIdAsync(request.ClientId);
                 var authorization = await _authorizationManager.CreateAsync(User, user.Id, application.Id,
-                                    type, principal.GetScopes());
+                                    type, principal.GetScopes().ToImmutableArray());
                 principal.SetInternalAuthorizationId(authorization.Id);
             }
 

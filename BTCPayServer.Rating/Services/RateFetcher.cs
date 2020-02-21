@@ -79,9 +79,9 @@ namespace BTCPayServer.Services.Rates
                 result.Latency = query.Latency;
                 if (query.Exception != null)
                     result.ExchangeExceptions.Add(query.Exception);
-                foreach (var rule in query.PairRates)
+                foreach (var rule in query.ExchangeRates)
                 {
-                    rateRule.ExchangeRates.SetRate(query.Exchange, rule.CurrencyPair, rule.BidAsk);
+                    rateRule.ExchangeRates.SetRate(rule.Exchange, rule.CurrencyPair, rule.BidAsk);
                 }
             }
             rateRule.Reevaluate();

@@ -29,11 +29,14 @@ namespace BTCPayServer.HostedServices
             }
         }
         private SettingsRepository _SettingsRepository;
+        private CoinAverageSettings _coinAverageSettings;
         RateProviderFactory _RateProviderFactory;
         public RatesHostedService(SettingsRepository repo,
-                                  RateProviderFactory rateProviderFactory)
+                                  RateProviderFactory rateProviderFactory,
+                                  CoinAverageSettings coinAverageSettings)
         {
             this._SettingsRepository = repo;
+            _coinAverageSettings = coinAverageSettings;
             _RateProviderFactory = rateProviderFactory;
         }
 
@@ -41,6 +44,8 @@ namespace BTCPayServer.HostedServices
         {
             return new Task[]
             {
+                CreateLoopTask(RefreshCoinAverageSupportedExchanges),
+                CreateLoopTask(RefreshCoinAverageSettings),
                 CreateLoopTask(RefreshRates)
             };
         }
@@ -50,20 +55,13 @@ namespace BTCPayServer.HostedServices
             return fetcher.LastRequested is DateTimeOffset v &&
                    DateTimeOffset.UtcNow - v < TimeSpan.FromDays(1.0);
         }
-
-        IEnumerable<(string ExchangeName, BackgroundFetcherRateProvider Fetcher)> GetStillUsedProviders()
-        {
-            foreach (var kv in _RateProviderFactory.Providers)
-            {
-                if (kv.Value is BackgroundFetcherRateProvider fetcher && IsStillUsed(fetcher))
-                {
-                    yield return (kv.Key, fetcher);
-                }
-            }
-        }
         async Task RefreshRates()
         {
-            var usedProviders = GetStillUsedProviders().ToArray();
+            var usedProviders = _RateProviderFactory.Providers
+                                    .Select(p => p.Value)
+                                    .OfType<BackgroundFetcherRateProvider>()
+                                    .Where(IsStillUsed)
+                                    .ToArray();
             if (usedProviders.Length == 0)
             {
                 await Task.Delay(TimeSpan.FromSeconds(30), Cancellation);
@@ -75,11 +73,11 @@ namespace BTCPayServer.HostedServices
                 try
                 {
                     await Task.WhenAll(usedProviders
-                                    .Select(p => p.Fetcher.UpdateIfNecessary(timeout.Token).ContinueWith(t =>
+                                    .Select(p => p.UpdateIfNecessary(timeout.Token).ContinueWith(t =>
                                     {
                                         if (t.Result.Exception != null)
                                         {
-                                            Logs.PayServer.LogWarning($"Error while contacting exchange {p.ExchangeName}: {t.Result.Exception.Message}");
+                                            Logs.PayServer.LogWarning($"Error while contacting {p.ExchangeName}: {t.Result.Exception.Message}");
                                         }
                                     }, TaskScheduler.Default))
                                     .ToArray()).WithCancellation(timeout.Token);
@@ -115,26 +113,19 @@ namespace BTCPayServer.HostedServices
 
         private async Task TryLoadRateCache()
         {
-            try
+            var cache = await _SettingsRepository.GetSettingAsync<ExchangeRatesCache>();
+            if (cache != null)
             {
-                var cache = await _SettingsRepository.GetSettingAsync<ExchangeRatesCache>();
-                if (cache != null)
+                _LastCacheDate = cache.Created;
+                var stateByExchange = cache.States.ToDictionary(o => o.ExchangeName);
+                foreach (var obj in _RateProviderFactory.Providers
+                                    .Select(p => p.Value)
+                                    .OfType<BackgroundFetcherRateProvider>()
+                                    .Select(v => (Fetcher: v, State: stateByExchange.TryGet(v.ExchangeName)))
+                                    .Where(v => v.State != null))
                 {
-                    _LastCacheDate = cache.Created;
-                    var stateByExchange = cache.States.ToDictionary(o => o.ExchangeName);
-                    foreach (var provider in _RateProviderFactory.Providers)
-                    {
-                        if (stateByExchange.TryGetValue(provider.Key, out var state) &&
-                            provider.Value is BackgroundFetcherRateProvider fetcher)
-                        {
-                            fetcher.LoadState(state);
-                        }
-                    }
+                    obj.Fetcher.LoadState(obj.State);
                 }
-            }
-            catch (Exception ex)
-            {
-                Logs.PayServer.LogWarning(ex, "Warning: Error while trying to load rates from cache");
             }
         }
 
@@ -144,16 +135,41 @@ namespace BTCPayServer.HostedServices
             var cache = new ExchangeRatesCache();
             cache.Created = DateTimeOffset.UtcNow;
             _LastCacheDate = cache.Created;
-
-            var usedProviders = GetStillUsedProviders().ToArray();
-            cache.States = new List<BackgroundFetcherState>(usedProviders.Length);
-            foreach (var provider in usedProviders)
-            {
-                var state = provider.Fetcher.GetState();
-                state.ExchangeName = provider.ExchangeName;
-                cache.States.Add(state);
-            }
+            cache.States = _RateProviderFactory.Providers
+                                    .Select(p => p.Value)
+                                    .OfType<BackgroundFetcherRateProvider>()
+                                    .Where(IsStillUsed)
+                                    .Select(p => p.GetState())
+                                    .ToList();
             await _SettingsRepository.UpdateSetting(cache);
+        }
+
+        async Task RefreshCoinAverageSupportedExchanges()
+        {
+            var exchanges = new CoinAverageExchanges();
+            foreach (var item in (await new CoinAverageRateProvider() { Authenticator = _coinAverageSettings }.GetExchangeTickersAsync())
+                .Exchanges
+                .Select(c => new CoinAverageExchange(c.Name, c.DisplayName, $"https://apiv2.bitcoinaverage.com/exchanges/{c.Name}")))
+            {
+                exchanges.Add(item);
+            }
+            _coinAverageSettings.AvailableExchanges = exchanges;
+            await Task.Delay(TimeSpan.FromHours(5), Cancellation);
+        }
+
+        async Task RefreshCoinAverageSettings()
+        {
+            var rates = (await _SettingsRepository.GetSettingAsync<RatesSetting>()) ?? new RatesSetting();
+            _RateProviderFactory.CacheSpan = TimeSpan.FromMinutes(rates.CacheInMinutes);
+            if (!string.IsNullOrWhiteSpace(rates.PrivateKey) && !string.IsNullOrWhiteSpace(rates.PublicKey))
+            {
+                _coinAverageSettings.KeyPair = (rates.PublicKey, rates.PrivateKey);
+            }
+            else
+            {
+                _coinAverageSettings.KeyPair = null;
+            }
+            await _SettingsRepository.WaitSettingsChanged<RatesSetting>(Cancellation);
         }
     }
 }

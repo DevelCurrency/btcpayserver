@@ -64,7 +64,7 @@ services:
         - "sshd_datadir:/root/.ssh"
 
   devlnd: 
-    image: btcpayserver/bitcoin:0.19.0.1
+    image: btcpayserver/bitcoin:0.18.0
     environment:
       BITCOIN_NETWORK: regtest
       BITCOIN_EXTRA_ARGS: |
@@ -76,7 +76,7 @@ services:
       - customer_lnd
       - merchant_lnd
   nbxplorer:
-    image: nicolasdorier/nbxplorer:2.1.8
+    image: nicolasdorier/nbxplorer:2.1.2
     restart: unless-stopped
     ports:
       - "32838:32838"
@@ -98,8 +98,6 @@ services:
       NBXPLORER_LBTCRPCUSER: "liquid"
       NBXPLORER_LBTCRPCPASSWORD: "liquid"
       NBXPLORER_BIND: 0.0.0.0:32838
-      NBXPLORER_MINGAPSIZE: 5
-      NBXPLORER_MAXGAPSIZE: 10
       NBXPLORER_VERBOSE: 1
       NBXPLORER_NOAUTH: 1
     links:
@@ -110,7 +108,7 @@ services:
 
   bitcoind:
     restart: unless-stopped
-    image: btcpayserver/bitcoin:0.19.0.1
+    image: btcpayserver/bitcoin:0.18.0
     environment:
       BITCOIN_NETWORK: regtest
       BITCOIN_EXTRA_ARGS: |-
@@ -259,7 +257,7 @@ services:
       - "5432"
 
   merchant_lnd:
-    image: btcpayserver/lnd:v0.8.2-beta
+    image: btcpayserver/lnd:v0.7.1-beta-withseed
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"
@@ -289,7 +287,7 @@ services:
       - bitcoind
 
   customer_lnd:
-    image: btcpayserver/lnd:v0.8.2-beta
+    image: btcpayserver/lnd:v0.7.1-beta-withseed
     restart: unless-stopped
     environment:
       LND_CHAIN: "btc"

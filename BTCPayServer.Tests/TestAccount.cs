@@ -21,7 +21,6 @@ using BTCPayServer.Data;
 using OpenIddict.Abstractions;
 using OpenIddict.Core;
 using Microsoft.AspNetCore.Identity;
-using NBXplorer.Models;
 
 namespace BTCPayServer.Tests
 {
@@ -44,13 +43,18 @@ namespace BTCPayServer.Tests
             var userManager = parent.PayTester.GetService<UserManager<ApplicationUser>>();
             var u = await userManager.FindByIdAsync(UserId);
             await userManager.AddToRoleAsync(u, Roles.ServerAdmin);
-            IsAdmin = true;
         }
 
         public void Register()
         {
             RegisterAsync().GetAwaiter().GetResult();
         }
+
+        public BitcoinExtKey ExtKey
+        {
+            get; set;
+        }
+
         public async Task GrantAccessAsync()
         {
             await RegisterAsync();
@@ -96,46 +100,26 @@ namespace BTCPayServer.Tests
 
         public BTCPayNetwork SupportedNetwork { get; set; }
 
-        public WalletId RegisterDerivationScheme(string crytoCode, bool segwit = false, bool importKeysToNBX = false)
+        public WalletId RegisterDerivationScheme(string crytoCode, bool segwit = false)
         {
-            return RegisterDerivationSchemeAsync(crytoCode, segwit, importKeysToNBX).GetAwaiter().GetResult();
+            return RegisterDerivationSchemeAsync(crytoCode, segwit).GetAwaiter().GetResult();
         }
-        public async Task<WalletId> RegisterDerivationSchemeAsync(string cryptoCode, bool segwit = false, bool importKeysToNBX = false)
+        public async Task<WalletId> RegisterDerivationSchemeAsync(string cryptoCode, bool segwit = false)
         {
             SupportedNetwork = parent.NetworkProvider.GetNetwork<BTCPayNetwork>(cryptoCode);
             var store = parent.PayTester.GetController<StoresController>(UserId, StoreId);
-            GenerateWalletResponseV = await parent.ExplorerClient.GenerateWalletAsync(new GenerateWalletRequest()
-            {
-                ScriptPubKeyType = segwit ? ScriptPubKeyType.Segwit : ScriptPubKeyType.Legacy,
-                SavePrivateKeys = importKeysToNBX
-            });
-
+            ExtKey = new ExtKey().GetWif(SupportedNetwork.NBitcoinNetwork);
+            DerivationScheme = SupportedNetwork.NBXplorerNetwork.DerivationStrategyFactory.Parse(ExtKey.Neuter().ToString() + (segwit ? "" : "-[legacy]"));
             await store.AddDerivationScheme(StoreId, new DerivationSchemeViewModel()
             {
-                Enabled = true,
-                CryptoCode = cryptoCode,
-                Network = SupportedNetwork,
-                RootFingerprint = GenerateWalletResponseV.AccountKeyPath.MasterFingerprint.ToString(),
-                RootKeyPath = SupportedNetwork.GetRootKeyPath(),
-                Source = "NBXplorer",
-                AccountKey = GenerateWalletResponseV.AccountHDKey.Neuter().ToWif(),
-                DerivationSchemeFormat = "BTCPay",
-                KeyPath = GenerateWalletResponseV.AccountKeyPath.KeyPath.ToString(),
                 DerivationScheme = DerivationScheme.ToString(),
                 Confirmation = true
             }, cryptoCode);
+
             return new WalletId(StoreId, cryptoCode);
         }
 
-        public GenerateWalletResponse GenerateWalletResponseV { get; set; }
-
-        public DerivationStrategyBase DerivationScheme
-        {
-            get
-            {
-                return GenerateWalletResponseV.DerivationScheme;
-            }
-        }
+        public DerivationStrategyBase DerivationScheme { get; set; }
 
         private async Task RegisterAsync()
         {

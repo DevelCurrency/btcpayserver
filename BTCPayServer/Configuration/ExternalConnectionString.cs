@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using BTCPayServer.Controllers;
@@ -47,7 +46,7 @@ namespace BTCPayServer.Configuration
             }
             connectionString.Server = serviceUri;
 
-            if (serviceType == ExternalServiceTypes.LNDGRPC || serviceType == ExternalServiceTypes.LNDRest || serviceType == ExternalServiceTypes.CLightningRest)
+            if (serviceType == ExternalServiceTypes.LNDGRPC || serviceType == ExternalServiceTypes.LNDRest)
             {
                 // Read the MacaroonDirectory
                 if (connectionString.MacaroonDirectoryPath != null)
@@ -78,7 +77,7 @@ namespace BTCPayServer.Configuration
                 }
             }
 
-            if (new []{ExternalServiceTypes.Charge, ExternalServiceTypes.RTL,  ExternalServiceTypes.Spark, ExternalServiceTypes.Configurator}.Contains(serviceType))
+            if (serviceType == ExternalServiceTypes.Charge || serviceType == ExternalServiceTypes.RTL || serviceType == ExternalServiceTypes.Spark)
             {
                 // Read access key from cookie file
                 if (connectionString.CookieFilePath != null)
@@ -95,7 +94,7 @@ namespace BTCPayServer.Configuration
                     {
                         throw new System.IO.FileNotFoundException("Cookie file path not found", ex);
                     }
-                    if (serviceType == ExternalServiceTypes.RTL || serviceType == ExternalServiceTypes.Configurator)
+                    if (serviceType == ExternalServiceTypes.RTL)
                     {
                         connectionString.AccessKey = cookieFileContent;
                     }
@@ -145,7 +144,9 @@ namespace BTCPayServer.Configuration
         }
         public bool? IsOnion()
         {
-            return Server?.IsOnion();
+            if (this.Server == null || !this.Server.IsAbsoluteUri)
+                return null;
+            return this.Server.DnsSafeHost.EndsWith(".onion", StringComparison.OrdinalIgnoreCase);
         }
         public static bool TryParse(string str, out ExternalConnectionString result, out string error)
         {

@@ -15,7 +15,6 @@ namespace BTCPayServer.Models.InvoicingModels
         {
             Currency = "USD";
         }
-        
         [Required]
         public decimal? Amount
         {
@@ -29,13 +28,11 @@ namespace BTCPayServer.Models.InvoicingModels
         }
 
         [Required]
-        [DisplayName("Store Id")]
         public string StoreId
         {
             get; set;
         }
 
-        [DisplayName("Order Id")]
         public string OrderId
         {
             get; set;
@@ -54,7 +51,6 @@ namespace BTCPayServer.Models.InvoicingModels
         }
 
         [EmailAddress]
-        [DisplayName("Buyer Email")]
         public string BuyerEmail
         {
             get; set;
@@ -76,19 +72,22 @@ namespace BTCPayServer.Models.InvoicingModels
 
         public SelectList Stores
         {
-            get; set;
+            get;
+            set;
         }
 
         [DisplayName("Supported Transaction Currencies")]
         public List<string> SupportedTransactionCurrencies
         {
-            get; set;
+            get;
+            set;
         }
 
         [DisplayName("Available Payment Methods")]
         public SelectList AvailablePaymentMethods
         {
-            get; set;
+            get;
+            set;
         }
     }
 }

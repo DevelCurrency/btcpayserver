@@ -20,6 +20,10 @@ using BTCPayServer.Payments;
 using BTCPayServer.HostedServices;
 using NBitcoin.Altcoins.Elements;
 
+#if NETCOREAPP21
+using IHostApplicationLifetime = Microsoft.AspNetCore.Hosting.IApplicationLifetime;
+#endif
+
 namespace BTCPayServer.Payments.Bitcoin
 {
     /// <summary>
@@ -145,11 +149,6 @@ namespace BTCPayServer.Payments.Bitcoin
                                 break;
                             case NBXplorer.Models.NewTransactionEvent evt:
                                 wallet.InvalidateCache(evt.DerivationStrategy);
-                                _Aggregator.Publish(new NewOnChainTransactionEvent()
-                                {
-                                    CryptoCode = wallet.Network.CryptoCode,
-                                    NewTransactionEvent = evt
-                                });
                                 foreach (var output in network.GetValidOutputs(evt)) 
                                 {
                                         var key = output.Item1.ScriptPubKey.Hash + "#" + network.CryptoCode.ToUpperInvariant();
@@ -378,7 +377,7 @@ namespace BTCPayServer.Payments.Bitcoin
                 paymentMethod.Calculate().Due > Money.Zero)
             {
                 var address = await wallet.ReserveAddressAsync(strategy);
-                btc.DepositAddress = address.Address.ToString();
+                btc.DepositAddress = address.ToString();
                 await _InvoiceRepository.NewAddress(invoice.Id, btc, wallet.Network);
                 _Aggregator.Publish(new InvoiceNewAddressEvent(invoice.Id, address.ToString(), wallet.Network));
                 paymentMethod.SetPaymentMethodDetails(btc);

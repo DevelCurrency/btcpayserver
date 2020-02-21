@@ -9,6 +9,6 @@ namespace BTCPayServer.Services.Rates
 {
     public interface IRateProvider
     {
-        Task<PairRate[]> GetRatesAsync(CancellationToken cancellationToken);
+        Task<ExchangeRates> GetRatesAsync(CancellationToken cancellationToken);
     }
 }
